@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>AnimeAV1 Native</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <style>
+    * { -webkit-tap-highlight-color: transparent; user-select: none; }
+    body { background-color: #09090b; color: #f4f4f5; font-family: system-ui, -apple-system, sans-serif; overflow-x: hidden; }
+    ::-webkit-scrollbar { display: none; }
+    .video-container:fullscreen { width: 100vw; height: 100vh; background: #000; }
+  </style>
+</head>
+<body>
+  <div id="app" class="min-h-screen pb-20">
+    
+    <!-- BARRA SUPERIOR -->
+    <header class="sticky top-0 z-40 bg-zinc-950/90 backdrop-blur-md border-b border-zinc-800 px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-2" @click="resetHome">
+        <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center font-black text-white shadow-lg shadow-indigo-500/30">A1</div>
+        <span class="font-bold text-lg tracking-tight">Anime<span class="text-indigo-400">AV1</span></span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Nativo</span>
+      </div>
+    </header>
+
+    <!-- BUSCADOR -->
+    <div class="px-4 pt-4">
+      <div class="relative">
+        <input 
+          v-model="searchQuery" 
+          @keyup.enter="searchAnime"
+          type="search" 
+          placeholder="Buscar anime en animeav1.com..." 
+          class="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 pl-4 pr-12 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500 transition"
+        />
+        <button @click="searchAnime" class="absolute right-2 top-1/2 -translate-y-1/2 bg-indigo-600 p-2 rounded-lg text-white">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- REPRODUCTOR NATIVO INTEGRADO -->
+    <div v-if="activeVideo.url || activeVideo.embedUrl" class="mt-4 px-4">
+      <div class="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden shadow-2xl">
+        <div ref="playerBox" class="video-container relative aspect-video bg-black flex items-center justify-center">
+          <video 
+            v-if="activeVideo.url" 
+            ref="nativeVideo" 
+            controls 
+            autoplay 
+            playsinline 
+            class="w-full h-full object-contain"
+          ></video>
+
+          <iframe 
+            v-else-if="activeVideo.embedUrl" 
+            :src="activeVideo.embedUrl" 
+            class="w-full h-full border-0" 
+            allowfullscreen 
+            allow="autoplay; fullscreen"
+          ></iframe>
+        </div>
+
+        <div class="p-3 flex items-center justify-between bg-zinc-900">
+          <div class="truncate pr-2">
+            <p class="text-xs text-indigo-400 font-semibold">Reproduciendo ahora</p>
+            <h3 class="text-sm font-bold truncate">{{ activeVideo.title }}</h3>
+          </div>
+          <div class="flex gap-2 shrink-0">
+            <button @click="toggleFullscreen" class="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-xs font-medium">
+              Pantalla Completa
+            </button>
+            <button @click="closePlayer" class="px-3 py-1.5 bg-red-500/20 text-red-400 rounded-lg text-xs font-medium">
+              Cerrar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VISTA DETALLE DE ANIME Y EPISODIOS -->
+    <div v-if="selectedAnime" class="px-4 mt-5">
+      <button @click="selectedAnime = null" class="flex items-center gap-1 text-xs text-zinc-400 mb-3 hover:text-white">
+        ← Volver al catálogo
+      </button>
+
+      <div class="flex gap-4 bg-zinc-900/60 border border-zinc-800/80 p-3 rounded-2xl">
+        <img :src="selectedAnime.image" class="w-24 h-36 object-cover rounded-xl shrink-0 bg-zinc-800" />
+        <div class="flex flex-col justify-between">
+          <div>
+            <h2 class="font-bold text-base leading-snug">{{ selectedAnime.title }}</h2>
+            <p class="text-xs text-zinc-400 mt-1 line-clamp-3">{{ selectedAnime.synopsis || 'Sin sinopsis disponible.' }}</p>
+          </div>
+          <div class="flex gap-2 mt-2">
+            <span class="text-[11px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded">{{ selectedAnime.status || 'AnimeAV1' }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- LISTA DE EPISODIOS -->
+      <h3 class="font-bold text-sm mt-5 mb-3 text-zinc-300">Episodios disponibles</h3>
+      <div v-if="loadingEpisodes" class="text-center py-8 text-xs text-zinc-500">Extrayendo episodios desde animeav1.com...</div>
+      <div v-else class="grid grid-cols-3 sm:grid-cols-4 gap-2">
+        <button 
+          v-for="ep in episodes" 
+          :key="ep.number"
+          @click="playEpisode(ep)"
+          class="bg-zinc-900 hover:bg-indigo-600 border border-zinc-800 rounded-xl py-3 px-2 text-center transition active:scale-95"
+        >
+          <span class="block text-xs text-zinc-400">Episodio</span>
+          <span class="font-bold text-sm">{{ ep.number }}</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- CATÁLOGO PRINCIPAL -->
+    <main v-else class="px-4 mt-5">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="font-bold text-base">{{ sectionTitle }}</h2>
+        <span v-if="loading" class="text-xs text-indigo-400 animate-pulse">Sincronizando...</span>
+      </div>
+
+      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+        <div 
+          v-for="anime in animeList" 
+          :key="anime.id"
+          @click="openAnime(anime)"
+          class="bg-zinc-900/80 border border-zinc-800/80 rounded-2xl overflow-hidden active:scale-95 transition cursor-pointer"
+        >
+          <div class="relative aspect-[3/4] bg-zinc-800">
+            <img :src="anime.image" loading="lazy" class="w-full h-full object-cover" />
+            <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-2.5">
+              <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-indigo-600 text-white">SUB ESPAÑOL</span>
+            </div>
+          </div>
+          <div class="p-2.5">
+            <h3 class="font-semibold text-xs line-clamp-2 leading-tight">{{ anime.title }}</h3>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- MENÚ INFERIOR -->
+    <nav class="fixed bottom-0 inset-x-0 bg-zinc-950/95 backdrop-blur-md border-t border-zinc-800 flex justify-around py-2.5 z-40">
+      <button @click="resetHome" class="flex flex-col items-center text-indigo-400 text-xs font-medium">
+        <svg class="w-5 h-5 mb-0.5" fill="currentColor" viewBox="0 0 20 20"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/></svg>
+        Inicio
+      </button>
+      <button @click="loadTrending" class="flex flex-col items-center text-zinc-400 hover:text-white text-xs font-medium">
+        <svg class="w-5 h-5 mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+        En Emisión
+      </button>
+    </nav>
+
+  </div>
+
+  <script>
+    const { createApp, ref, onMounted, nextTick } = Vue;
+
+    createApp({
+      setup() {
+        const BASE_SITE = 'https://animeav1.com';
+        const CORS_PROXY = 'https://api.allorigins.win/get?url=';
+
+        const animeList = ref([]);
+        const searchQuery = ref('');
+        const sectionTitle = ref('Recientes en AnimeAV1');
+        const loading = ref(false);
+        const selectedAnime = ref(null);
+        const episodes = ref([]);
+        const loadingEpisodes = ref(false);
+        const nativeVideo = ref(null);
+        const playerBox = ref(null);
+        const activeVideo = ref({ url: '', embedUrl: '', title: '' });
+
+        const fetchFromAnimeAV1 = async (path = '') => {
+          loading.value = true;
+          try {
+            const targetUrl = encodeURIComponent(`${BASE_SITE}${path}`);
+            const res = await fetch(`${CORS_PROXY}${targetUrl}`);
+            const json = await res.json();
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(json.contents, 'text/html');
+
+            const items = [];
+            doc.querySelectorAll('article, .anime-card, a[href*="/media/"]').forEach((el, idx) => {
+              const linkEl = el.tagName === 'A' ? el : el.querySelector('a');
+              const imgEl = el.querySelector('img');
+              const titleEl = el.querySelector('h2, h3, .title') || linkEl;
+              
+              if (linkEl && imgEl && titleEl) {
+                const href = linkEl.getAttribute('href');
+                const title = titleEl.textContent.trim();
+                const image = imgEl.getAttribute('src') || imgEl.getAttribute('data-src');
+                if (title && image && !items.some(i => i.title === title)) {
+                  items.push({
+                    id: idx + '-' + title,
+                    title,
+                    image: image.startsWith('http') ? image : `${BASE_SITE}${image}`,
+                    url: href.startsWith('http') ? href : `${BASE_SITE}${href}`
+                  });
+                }
+              }
+            });
+
+            if (items.length > 0) {
+              animeList.value = items;
+            } else {
+              await loadFallbackCatalog(searchQuery.value);
+            }
+          } catch (e) {
+            await loadFallbackCatalog(searchQuery.value);
+          } finally {
+            loading.value = false;
+          }
+        };
+
+        const loadFallbackCatalog = async (query = '') => {
+          const endpoint = query 
+            ? `https://api.jikan.moe/v4/anime?q=${encodeURIComponent(query)}&limit=16`
+            : `https://api.jikan.moe/v4/seasons/now?limit=16`;
+          const res = await fetch(endpoint);
+          const data = await res.json();
+          animeList.value = (data.data || []).map(a => ({
+            id: a.mal_id,
+            title: a.title,
+            image: a.images.jpg.large_image_url,
+            synopsis: a.synopsis,
+            status: a.status,
+            totalEpisodes: a.episodes || 12,
+            slug: a.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+          }));
+        };
+
+        const searchAnime = () => {
+          if (!searchQuery.value.trim()) return resetHome();
+          sectionTitle.value = `Resultados para "${searchQuery.value}"`;
+          fetchFromAnimeAV1(`/catalogo?search=${encodeURIComponent(searchQuery.value)}`);
+        };
+
+        const loadTrending = () => {
+          searchQuery.value = '';
+          sectionTitle.value = 'Animes en Emisión';
+          fetchFromAnimeAV1('/catalogo?status=emision');
+        };
+
+        const resetHome = () => {
+          selectedAnime.value = null;
+          searchQuery.value = '';
+          sectionTitle.value = 'Recientes en AnimeAV1';
+          fetchFromAnimeAV1('/');
+        };
+
+        const openAnime = async (anime) => {
+          selectedAnime.value = anime;
+          loadingEpisodes.value = true;
+          episodes.value = [];
+
+          try {
+            if (anime.url) {
+              const res = await fetch(`${CORS_PROXY}${encodeURIComponent(anime.url)}`);
+              const json = await res.json();
+              const doc = new DOMParser().parseFromString(json.contents, 'text/html');
+              const desc = doc.querySelector('p, .synopsis, .description');
+              if (desc) selectedAnime.value.synopsis = desc.textContent.trim();
+
+              const eps = [];
+              doc.querySelectorAll('a[href*="/ver/"], a[href*="episodio"]').forEach((a, i) => {
+                const href = a.getAttribute('href');
+                const numMatch = a.textContent.match(/\d+/);
+                eps.push({
+                  number: numMatch ? numMatch[0] : i + 1,
+                  url: href.startsWith('http') ? href : `${BASE_SITE}${href}`
+                });
+              });
+
+              if (eps.length > 0) {
+                episodes.value = eps;
+                loadingEpisodes.value = false;
+                return;
+              }
+            }
+          } catch (e) {}
+
+          const count = anime.totalEpisodes || 12;
+          const slug = anime.slug || anime.title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+          episodes.value = Array.from({ length: count }, (_, i) => ({
+            number: i + 1,
+            url: `${BASE_SITE}/ver/${slug}-${i + 1}`
+          }));
+          loadingEpisodes.value = false;
+        };
+
+        const playEpisode = async (ep) => {
+          activeVideo.value = { url: '', embedUrl: '', title: `${selectedAnime.value.title} - Ep. ${ep.number}` };
+          
+          try {
+            const res = await fetch(`${CORS_PROXY}${encodeURIComponent(ep.url)}`);
+            const json = await res.json();
+            const html = json.contents || '';
+
+            const directStreamMatch = html.match(/https?:\/\/[^"'\s]+\.(m3u8|mp4)[^"'\s]*/i);
+            
+            if (directStreamMatch) {
+              await loadNativeStream(directStreamMatch[0]);
+              return;
+            }
+
+            const iframeMatch = html.match(/<iframe[^>]+src=["']([^"']+)["']/i);
+            if (iframeMatch) {
+              activeVideo.value.embedUrl = iframeMatch[1].startsWith('//') ? 'https:' + iframeMatch[1] : iframeMatch[1];
+              return;
+            }
+          } catch (e) {}
+
+          activeVideo.value.embedUrl = ep.url;
+        };
+
+        const loadNativeStream = async (streamUrl) => {
+          activeVideo.value.url = streamUrl;
+          await nextTick();
+          const video = nativeVideo.value;
+          if (!video) return;
+
+          if (streamUrl.includes('.m3u8') && Hls.isSupported()) {
+            const hls = new Hls();
+            hls.loadSource(streamUrl);
+            hls.attachMedia(video);
+            hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
+          } else {
+            video.src = streamUrl;
+            video.play();
+          }
+        };
+
+        const toggleFullscreen = () => {
+          const el = nativeVideo.value || playerBox.value;
+          if (el && el.requestFullscreen) {
+            el.requestFullscreen();
+            if (screen.orientation && screen.orientation.lock) {
+              screen.orientation.lock('landscape').catch(() => {});
+            }
+          }
+        };
+
+        const closePlayer = () => {
+          activeVideo.value = { url: '', embedUrl: '', title: '' };
+        };
+
+        onMounted(() => resetHome());
+
+        return {
+          animeList, searchQuery, sectionTitle, loading,
+          selectedAnime, episodes, loadingEpisodes,
+          activeVideo, nativeVideo, playerBox,
+          searchAnime, loadTrending, resetHome, openAnime, playEpisode, toggleFullscreen, closePlayer
+        };
+      }
+    }).mount('#app');
+  </script>
+</body>
+            </html>
+            
