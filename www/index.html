@@ -15,16 +15,18 @@
   </style>
 </head>
 <body>
-  <div id="app" class="min-h-screen pb-20">
+  <div id="app" class="min-h-screen pb-24">
     
     <!-- BARRA SUPERIOR -->
     <header class="sticky top-0 z-40 bg-zinc-950/90 backdrop-blur-md border-b border-zinc-800 px-4 py-3 flex items-center justify-between">
-      <div class="flex items-center gap-2" @click="resetHome">
+      <div class="flex items-center gap-2 cursor-pointer" @click="resetHome">
         <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center font-black text-white shadow-lg shadow-indigo-500/30">A1</div>
         <span class="font-bold text-lg tracking-tight">Anime<span class="text-indigo-400">AV1</span></span>
       </div>
       <div class="flex items-center gap-2">
-        <span class="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Nativo</span>
+        <span class="text-[11px] px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
+          {{ connectionSource }}
+        </span>
       </div>
     </header>
 
@@ -38,18 +40,25 @@
           placeholder="Buscar anime en animeav1.com..." 
           class="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 pl-4 pr-12 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500 transition"
         />
-        <button @click="searchAnime" class="absolute right-2 top-1/2 -translate-y-1/2 bg-indigo-600 p-2 rounded-lg text-white">
+        <button @click="searchAnime" class="absolute right-2 top-1/2 -translate-y-1/2 bg-indigo-600 active:bg-indigo-700 p-2 rounded-lg text-white">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
         </button>
       </div>
     </div>
 
     <!-- REPRODUCTOR NATIVO INTEGRADO -->
-    <div v-if="activeVideo.url || activeVideo.embedUrl" class="mt-4 px-4">
+    <div v-if="activeVideo.url || activeVideo.embedUrl || loadingVideo" class="mt-4 px-4">
       <div class="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden shadow-2xl">
         <div ref="playerBox" class="video-container relative aspect-video bg-black flex items-center justify-center">
+          
+          <div v-if="loadingVideo" class="flex flex-col items-center gap-2 text-zinc-400">
+            <div class="w-7 h-7 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+            <span class="text-xs">Extrayendo stream de video...</span>
+          </div>
+
+          <!-- Reproductor Nativo Directo (.mp4 / .m3u8) -->
           <video 
-            v-if="activeVideo.url" 
+            v-else-if="activeVideo.url" 
             ref="nativeVideo" 
             controls 
             autoplay 
@@ -57,26 +66,40 @@
             class="w-full h-full object-contain"
           ></video>
 
+          <!-- Reproductor Web Embebido sin popups -->
           <iframe 
             v-else-if="activeVideo.embedUrl" 
             :src="activeVideo.embedUrl" 
             class="w-full h-full border-0" 
             allowfullscreen 
             allow="autoplay; fullscreen"
+            referrerpolicy="no-referrer"
           ></iframe>
         </div>
 
-        <div class="p-3 flex items-center justify-between bg-zinc-900">
-          <div class="truncate pr-2">
-            <p class="text-xs text-indigo-400 font-semibold">Reproduciendo ahora</p>
-            <h3 class="text-sm font-bold truncate">{{ activeVideo.title }}</h3>
-          </div>
-          <div class="flex gap-2 shrink-0">
-            <button @click="toggleFullscreen" class="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-xs font-medium">
-              Pantalla Completa
-            </button>
-            <button @click="closePlayer" class="px-3 py-1.5 bg-red-500/20 text-red-400 rounded-lg text-xs font-medium">
+        <div class="p-3 bg-zinc-900 space-y-2">
+          <div class="flex items-center justify-between">
+            <div class="truncate pr-2">
+              <p class="text-[11px] text-indigo-400 font-semibold">
+                {{ activeVideo.url ? 'Reproductor Nativo HD' : 'Servidor Web Integrado' }}
+              </p>
+              <h3 class="text-sm font-bold truncate">{{ activeVideo.title }}</h3>
+            </div>
+            <button @click="closePlayer" class="px-3 py-1.5 bg-red-500/20 text-red-400 rounded-lg text-xs font-medium shrink-0">
               Cerrar
+            </button>
+          </div>
+
+          <!-- Controles Rápidos del Reproductor -->
+          <div class="flex items-center gap-2 pt-1 border-t border-zinc-800/80">
+            <button v-if="activeVideo.url" @click="skipTime(-10)" class="flex-1 py-1.5 bg-zinc-800 rounded-lg text-xs font-medium active:bg-zinc-700">
+              -10s
+            </button>
+            <button v-if="activeVideo.url" @click="skipTime(10)" class="flex-1 py-1.5 bg-zinc-800 rounded-lg text-xs font-medium active:bg-zinc-700">
+              +10s
+            </button>
+            <button @click="toggleFullscreen" class="flex-1 py-1.5 bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-medium">
+              Pantalla Completa
             </button>
           </div>
         </div>
@@ -85,57 +108,87 @@
 
     <!-- VISTA DETALLE DE ANIME Y EPISODIOS -->
     <div v-if="selectedAnime" class="px-4 mt-5">
-      <button @click="selectedAnime = null" class="flex items-center gap-1 text-xs text-zinc-400 mb-3 hover:text-white">
-        ← Volver al catálogo
-      </button>
+      <div class="flex items-center justify-between mb-3">
+        <button @click="selectedAnime = null" class="flex items-center gap-1 text-xs text-zinc-400 hover:text-white py-1">
+          ← Volver al catálogo
+        </button>
+        <button @click="toggleFavorite(selectedAnime)" class="px-3 py-1 rounded-full text-xs font-medium border transition"
+          :class="isFavorite(selectedAnime) ? 'bg-pink-500/20 border-pink-500/40 text-pink-300' : 'bg-zinc-900 border-zinc-700 text-zinc-300'">
+          {{ isFavorite(selectedAnime) ? '♥ En Favoritos' : '♡ Guardar' }}
+        </button>
+      </div>
 
-      <div class="flex gap-4 bg-zinc-900/60 border border-zinc-800/80 p-3 rounded-2xl">
+      <div class="flex gap-4 bg-zinc-900/70 border border-zinc-800 p-3 rounded-2xl">
         <img :src="selectedAnime.image" class="w-24 h-36 object-cover rounded-xl shrink-0 bg-zinc-800" />
         <div class="flex flex-col justify-between">
           <div>
             <h2 class="font-bold text-base leading-snug">{{ selectedAnime.title }}</h2>
-            <p class="text-xs text-zinc-400 mt-1 line-clamp-3">{{ selectedAnime.synopsis || 'Sin sinopsis disponible.' }}</p>
+            <p class="text-xs text-zinc-400 mt-1.5 line-clamp-4">{{ selectedAnime.synopsis || 'Explora los episodios disponibles vinculados a animeav1.com.' }}</p>
           </div>
           <div class="flex gap-2 mt-2">
-            <span class="text-[11px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded">{{ selectedAnime.status || 'AnimeAV1' }}</span>
+            <span class="text-[11px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded font-medium">{{ selectedAnime.status || 'SUB ESPAÑOL' }}</span>
           </div>
         </div>
       </div>
 
       <!-- LISTA DE EPISODIOS -->
-      <h3 class="font-bold text-sm mt-5 mb-3 text-zinc-300">Episodios disponibles</h3>
-      <div v-if="loadingEpisodes" class="text-center py-8 text-xs text-zinc-500">Extrayendo episodios desde animeav1.com...</div>
+      <div class="flex items-center justify-between mt-5 mb-3">
+        <h3 class="font-bold text-sm text-zinc-200">Episodios ({{ episodes.length }})</h3>
+        <span class="text-[11px] text-zinc-500">Toca para reproducir</span>
+      </div>
+
+      <div v-if="loadingEpisodes" class="grid grid-cols-3 gap-2">
+        <div v-for="n in 6" :key="n" class="h-14 bg-zinc-900 rounded-xl animate-pulse"></div>
+      </div>
+
       <div v-else class="grid grid-cols-3 sm:grid-cols-4 gap-2">
         <button 
           v-for="ep in episodes" 
           :key="ep.number"
           @click="playEpisode(ep)"
-          class="bg-zinc-900 hover:bg-indigo-600 border border-zinc-800 rounded-xl py-3 px-2 text-center transition active:scale-95"
+          :class="lastWatchedEp === `${selectedAnime.id}-${ep.number}` ? 'border-indigo-500 bg-indigo-950/40' : 'border-zinc-800 bg-zinc-900'"
+          class="hover:bg-indigo-600 border rounded-xl py-3 px-2 text-center transition active:scale-95"
         >
-          <span class="block text-xs text-zinc-400">Episodio</span>
+          <span class="block text-[11px] text-zinc-400">Episodio</span>
           <span class="font-bold text-sm">{{ ep.number }}</span>
         </button>
       </div>
     </div>
 
-    <!-- CATÁLOGO PRINCIPAL -->
+    <!-- CATÁLOGO PRINCIPAL / FAVORITOS -->
     <main v-else class="px-4 mt-5">
       <div class="flex items-center justify-between mb-3">
         <h2 class="font-bold text-base">{{ sectionTitle }}</h2>
-        <span v-if="loading" class="text-xs text-indigo-400 animate-pulse">Sincronizando...</span>
+        <button v-if="!loading" @click="reloadCurrent" class="text-xs text-indigo-400 font-medium">Actualizar</button>
       </div>
 
-      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+      <!-- Skeleton de carga rápida -->
+      <div v-if="loading" class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <div v-for="n in 6" :key="n" class="bg-zinc-900 rounded-2xl overflow-hidden animate-pulse">
+          <div class="aspect-[3/4] bg-zinc-800"></div>
+          <div class="p-3 space-y-2">
+            <div class="h-3 bg-zinc-800 rounded w-3/4"></div>
+            <div class="h-3 bg-zinc-800 rounded w-1/2"></div>
+          </div>
+        </div>
+      </div>
+
+      <div v-else-if="animeList.length === 0" class="text-center py-12 text-zinc-500 text-sm">
+        No se encontraron animes en esta sección.
+      </div>
+
+      <div v-else class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
         <div 
           v-for="anime in animeList" 
           :key="anime.id"
           @click="openAnime(anime)"
-          class="bg-zinc-900/80 border border-zinc-800/80 rounded-2xl overflow-hidden active:scale-95 transition cursor-pointer"
+          class="bg-zinc-900/90 border border-zinc-800/80 rounded-2xl overflow-hidden active:scale-95 transition cursor-pointer"
         >
           <div class="relative aspect-[3/4] bg-zinc-800">
             <img :src="anime.image" loading="lazy" class="w-full h-full object-cover" />
-            <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-2.5">
-              <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-indigo-600 text-white">SUB ESPAÑOL</span>
+            <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent p-2.5 flex justify-between items-end">
+              <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-indigo-600 text-white">SUB ESP</span>
+              <span v-if="anime.score" class="text-[10px] font-bold text-amber-400">★ {{ anime.score }}</span>
             </div>
           </div>
           <div class="p-2.5">
@@ -147,13 +200,17 @@
 
     <!-- MENÚ INFERIOR -->
     <nav class="fixed bottom-0 inset-x-0 bg-zinc-950/95 backdrop-blur-md border-t border-zinc-800 flex justify-around py-2.5 z-40">
-      <button @click="resetHome" class="flex flex-col items-center text-indigo-400 text-xs font-medium">
+      <button @click="resetHome" :class="activeTab === 'home' ? 'text-indigo-400' : 'text-zinc-400'" class="flex flex-col items-center text-xs font-medium">
         <svg class="w-5 h-5 mb-0.5" fill="currentColor" viewBox="0 0 20 20"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/></svg>
         Inicio
       </button>
-      <button @click="loadTrending" class="flex flex-col items-center text-zinc-400 hover:text-white text-xs font-medium">
+      <button @click="loadTrending" :class="activeTab === 'airing' ? 'text-indigo-400' : 'text-zinc-400'" class="flex flex-col items-center text-xs font-medium">
         <svg class="w-5 h-5 mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
         En Emisión
+      </button>
+      <button @click="showFavorites" :class="activeTab === 'favs' ? 'text-indigo-400' : 'text-zinc-400'" class="flex flex-col items-center text-xs font-medium">
+        <svg class="w-5 h-5 mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+        Favoritos
       </button>
     </nav>
 
@@ -165,96 +222,188 @@
     createApp({
       setup() {
         const BASE_SITE = 'https://animeav1.com';
-        const CORS_PROXY = 'https://api.allorigins.win/get?url=';
-
         const animeList = ref([]);
         const searchQuery = ref('');
         const sectionTitle = ref('Recientes en AnimeAV1');
+        const activeTab = ref('home');
+        const connectionSource = ref('Nativo');
         const loading = ref(false);
         const selectedAnime = ref(null);
         const episodes = ref([]);
         const loadingEpisodes = ref(false);
+        const loadingVideo = ref(false);
         const nativeVideo = ref(null);
         const playerBox = ref(null);
         const activeVideo = ref({ url: '', embedUrl: '', title: '' });
+        const favorites = ref(JSON.parse(localStorage.getItem('animeav1_favs') || '[]'));
+        const lastWatchedEp = ref(localStorage.getItem('animeav1_last_ep') || '');
 
-        const fetchFromAnimeAV1 = async (path = '') => {
-          loading.value = true;
+        // Fetch con timeout estricto de 4 segundos para que NUNCA se quede colgado
+        const fetchWithTimeout = async (url, ms = 4000) => {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), ms);
           try {
-            const targetUrl = encodeURIComponent(`${BASE_SITE}${path}`);
-            const res = await fetch(`${CORS_PROXY}${targetUrl}`);
-            const json = await res.json();
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(json.contents, 'text/html');
-
-            const items = [];
-            doc.querySelectorAll('article, .anime-card, a[href*="/media/"]').forEach((el, idx) => {
-              const linkEl = el.tagName === 'A' ? el : el.querySelector('a');
-              const imgEl = el.querySelector('img');
-              const titleEl = el.querySelector('h2, h3, .title') || linkEl;
-              
-              if (linkEl && imgEl && titleEl) {
-                const href = linkEl.getAttribute('href');
-                const title = titleEl.textContent.trim();
-                const image = imgEl.getAttribute('src') || imgEl.getAttribute('data-src');
-                if (title && image && !items.some(i => i.title === title)) {
-                  items.push({
-                    id: idx + '-' + title,
-                    title,
-                    image: image.startsWith('http') ? image : `${BASE_SITE}${image}`,
-                    url: href.startsWith('http') ? href : `${BASE_SITE}${href}`
-                  });
-                }
-              }
-            });
-
-            if (items.length > 0) {
-              animeList.value = items;
-            } else {
-              await loadFallbackCatalog(searchQuery.value);
-            }
-          } catch (e) {
-            await loadFallbackCatalog(searchQuery.value);
-          } finally {
-            loading.value = false;
+            const response = await fetch(url, { signal: controller.signal });
+            clearTimeout(timer);
+            return response;
+          } catch (err) {
+            clearTimeout(timer);
+            throw err;
           }
         };
 
-        const loadFallbackCatalog = async (query = '') => {
-          const endpoint = query 
-            ? `https://api.jikan.moe/v4/anime?q=${encodeURIComponent(query)}&limit=16`
-            : `https://api.jikan.moe/v4/seasons/now?limit=16`;
-          const res = await fetch(endpoint);
-          const data = await res.json();
-          animeList.value = (data.data || []).map(a => ({
-            id: a.mal_id,
-            title: a.title,
-            image: a.images.jpg.large_image_url,
-            synopsis: a.synopsis,
-            status: a.status,
-            totalEpisodes: a.episodes || 12,
-            slug: a.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')
-          }));
+        // Intenta obtener el HTML desde animeav1 usando HTTP nativo de Capacitor o proxies rápidos
+        const fetchHtmlSmart = async (targetUrl) => {
+          // 1. Intentar petición nativa directa si CapacitorHttp está activo
+          if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.CapacitorHttp) {
+            try {
+              const res = await window.Capacitor.Plugins.CapacitorHttp.get({
+                url: targetUrl,
+                headers: { 'User-Agent': 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36' }
+              });
+              if (res && res.data && typeof res.data === 'string' && res.data.includes('<html')) {
+                connectionSource.value = 'AnimeAV1 Directo';
+                return res.data;
+              }
+            } catch (e) {}
+          }
+
+          // 2. Rotación rápida de proxies con límite de 4s cada uno
+          const proxies = [
+            `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`,
+            `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`
+          ];
+
+          for (const proxyUrl of proxies) {
+            try {
+              const res = await fetchWithTimeout(proxyUrl, 4000);
+              if (res.ok) {
+                const text = await res.text();
+                if (text && text.includes('<')) {
+                  connectionSource.value = 'AnimeAV1 Sync';
+                  return text;
+                }
+              }
+            } catch (e) {}
+          }
+          return null;
+        };
+
+        const fetchFromAnimeAV1 = async (path = '', fallbackType = 'now', query = '') => {
+          loading.value = true;
+          try {
+            const html = await fetchHtmlSmart(`${BASE_SITE}${path}`);
+            if (html) {
+              const doc = new DOMParser().parseFromString(html, 'text/html');
+              const items = [];
+              doc.querySelectorAll('article, .anime-card, a[href*="/media/"]').forEach((el, idx) => {
+                const linkEl = el.tagName === 'A' ? el : el.querySelector('a');
+                const imgEl = el.querySelector('img');
+                const titleEl = el.querySelector('h2, h3, .title') || linkEl;
+                if (linkEl && imgEl && titleEl) {
+                  const href = linkEl.getAttribute('href');
+                  const title = titleEl.textContent.trim();
+                  const image = imgEl.getAttribute('src') || imgEl.getAttribute('data-src');
+                  if (title && image && !items.some(i => i.title === title)) {
+                    items.push({
+                      id: idx + '-' + title,
+                      title,
+                      image: image.startsWith('http') ? image : `${BASE_SITE}${image}`,
+                      url: href.startsWith('http') ? href : `${BASE_SITE}${href}`
+                    });
+                  }
+                }
+              });
+
+              if (items.length > 0) {
+                animeList.value = items;
+                loading.value = false;
+                return;
+              }
+            }
+          } catch (e) {}
+
+          // Si animeav1 usa protección Cloudflare, carga el catálogo sincronizado al instante
+          await loadCatalogAPI(fallbackType, query);
+          loading.value = false;
+        };
+
+        const loadCatalogAPI = async (type = 'now', query = '') => {
+          connectionSource.value = 'Catálogo Sync';
+          let endpoint = 'https://api.jikan.moe/v4/seasons/now?limit=20';
+          if (type === 'search' && query) {
+            endpoint = `https://api.jikan.moe/v4/anime?q=${encodeURIComponent(query)}&limit=20`;
+          } else if (type === 'top') {
+            endpoint = 'https://api.jikan.moe/v4/top/anime?filter=airing&limit=20';
+          }
+
+          try {
+            const res = await fetchWithTimeout(endpoint, 6000);
+            const data = await res.json();
+            animeList.value = (data.data || []).map(a => ({
+              id: a.mal_id,
+              title: a.title,
+              image: a.images.jpg.large_image_url,
+              synopsis: a.synopsis,
+              status: a.status,
+              score: a.score,
+              totalEpisodes: a.episodes || 12,
+              slug: a.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+            }));
+          } catch (e) {
+            animeList.value = [];
+          }
         };
 
         const searchAnime = () => {
           if (!searchQuery.value.trim()) return resetHome();
-          sectionTitle.value = `Resultados para "${searchQuery.value}"`;
-          fetchFromAnimeAV1(`/catalogo?search=${encodeURIComponent(searchQuery.value)}`);
+          selectedAnime.value = null;
+          activeTab.value = 'search';
+          sectionTitle.value = `Resultados: "${searchQuery.value}"`;
+          fetchFromAnimeAV1(`/catalogo?search=${encodeURIComponent(searchQuery.value)}`, 'search', searchQuery.value);
         };
 
         const loadTrending = () => {
+          selectedAnime.value = null;
           searchQuery.value = '';
+          activeTab.value = 'airing';
           sectionTitle.value = 'Animes en Emisión';
-          fetchFromAnimeAV1('/catalogo?status=emision');
+          fetchFromAnimeAV1('/catalogo?status=emision', 'top');
         };
 
         const resetHome = () => {
           selectedAnime.value = null;
           searchQuery.value = '';
+          activeTab.value = 'home';
           sectionTitle.value = 'Recientes en AnimeAV1';
-          fetchFromAnimeAV1('/');
+          fetchFromAnimeAV1('/', 'now');
         };
+
+        const showFavorites = () => {
+          selectedAnime.value = null;
+          activeTab.value = 'favs';
+          sectionTitle.value = 'Mis Favoritos';
+          animeList.value = favorites.value;
+        };
+
+        const reloadCurrent = () => {
+          if (activeTab.value === 'airing') loadTrending();
+          else if (activeTab.value === 'favs') showFavorites();
+          else if (searchQuery.value) searchAnime();
+          else resetHome();
+        };
+
+        const toggleFavorite = (anime) => {
+          const exists = favorites.value.some(f => f.id === anime.id);
+          if (exists) {
+            favorites.value = favorites.value.filter(f => f.id !== anime.id);
+          } else {
+            favorites.value.unshift(anime);
+          }
+          localStorage.setItem('animeav1_favs', JSON.stringify(favorites.value));
+        };
+
+        const isFavorite = (anime) => favorites.value.some(f => f.id === anime.id);
 
         const openAnime = async (anime) => {
           selectedAnime.value = anime;
@@ -263,106 +412,21 @@
 
           try {
             if (anime.url) {
-              const res = await fetch(`${CORS_PROXY}${encodeURIComponent(anime.url)}`);
-              const json = await res.json();
-              const doc = new DOMParser().parseFromString(json.contents, 'text/html');
-              const desc = doc.querySelector('p, .synopsis, .description');
-              if (desc) selectedAnime.value.synopsis = desc.textContent.trim();
+              const html = await fetchHtmlSmart(anime.url);
+              if (html) {
+                const doc = new DOMParser().parseFromString(html, 'text/html');
+                const desc = doc.querySelector('p, .synopsis, .description');
+                if (desc) selectedAnime.value.synopsis = desc.textContent.trim();
 
-              const eps = [];
-              doc.querySelectorAll('a[href*="/ver/"], a[href*="episodio"]').forEach((a, i) => {
-                const href = a.getAttribute('href');
-                const numMatch = a.textContent.match(/\d+/);
-                eps.push({
-                  number: numMatch ? numMatch[0] : i + 1,
-                  url: href.startsWith('http') ? href : `${BASE_SITE}${href}`
+                const eps = [];
+                doc.querySelectorAll('a[href*="/ver/"], a[href*="episodio"]').forEach((a, i) => {
+                  const href = a.getAttribute('href');
+                  const numMatch = a.textContent.match(/\d+/);
+                  eps.push({
+                    number: numMatch ? numMatch[0] : i + 1,
+                    url: href.startsWith('http') ? href : `${BASE_SITE}${href}`
+                  });
                 });
-              });
 
-              if (eps.length > 0) {
-                episodes.value = eps;
-                loadingEpisodes.value = false;
-                return;
-              }
-            }
-          } catch (e) {}
-
-          const count = anime.totalEpisodes || 12;
-          const slug = anime.slug || anime.title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-          episodes.value = Array.from({ length: count }, (_, i) => ({
-            number: i + 1,
-            url: `${BASE_SITE}/ver/${slug}-${i + 1}`
-          }));
-          loadingEpisodes.value = false;
-        };
-
-        const playEpisode = async (ep) => {
-          activeVideo.value = { url: '', embedUrl: '', title: `${selectedAnime.value.title} - Ep. ${ep.number}` };
-          
-          try {
-            const res = await fetch(`${CORS_PROXY}${encodeURIComponent(ep.url)}`);
-            const json = await res.json();
-            const html = json.contents || '';
-
-            const directStreamMatch = html.match(/https?:\/\/[^"'\s]+\.(m3u8|mp4)[^"'\s]*/i);
-            
-            if (directStreamMatch) {
-              await loadNativeStream(directStreamMatch[0]);
-              return;
-            }
-
-            const iframeMatch = html.match(/<iframe[^>]+src=["']([^"']+)["']/i);
-            if (iframeMatch) {
-              activeVideo.value.embedUrl = iframeMatch[1].startsWith('//') ? 'https:' + iframeMatch[1] : iframeMatch[1];
-              return;
-            }
-          } catch (e) {}
-
-          activeVideo.value.embedUrl = ep.url;
-        };
-
-        const loadNativeStream = async (streamUrl) => {
-          activeVideo.value.url = streamUrl;
-          await nextTick();
-          const video = nativeVideo.value;
-          if (!video) return;
-
-          if (streamUrl.includes('.m3u8') && Hls.isSupported()) {
-            const hls = new Hls();
-            hls.loadSource(streamUrl);
-            hls.attachMedia(video);
-            hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
-          } else {
-            video.src = streamUrl;
-            video.play();
-          }
-        };
-
-        const toggleFullscreen = () => {
-          const el = nativeVideo.value || playerBox.value;
-          if (el && el.requestFullscreen) {
-            el.requestFullscreen();
-            if (screen.orientation && screen.orientation.lock) {
-              screen.orientation.lock('landscape').catch(() => {});
-            }
-          }
-        };
-
-        const closePlayer = () => {
-          activeVideo.value = { url: '', embedUrl: '', title: '' };
-        };
-
-        onMounted(() => resetHome());
-
-        return {
-          animeList, searchQuery, sectionTitle, loading,
-          selectedAnime, episodes, loadingEpisodes,
-          activeVideo, nativeVideo, playerBox,
-          searchAnime, loadTrending, resetHome, openAnime, playEpisode, toggleFullscreen, closePlayer
-        };
-      }
-    }).mount('#app');
-  </script>
-</body>
-            </html>
-            
+                if (eps.length > 0) {
+                  episodes.value =
