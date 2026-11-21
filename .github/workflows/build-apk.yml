@@ -28,6 +28,18 @@ jobs:
         run: |
           npm install
           npx cap init "AnimeAV1" "com.animeav1.app" --web-dir="www"
+          cat << 'EOF' > capacitor.config.json
+          {
+            "appId": "com.animeav1.app",
+            "appName": "AnimeAV1",
+            "webDir": "www",
+            "plugins": {
+              "CapacitorHttp": {
+                "enabled": true
+              }
+            }
+          }
+          EOF
           npx cap add android
           sed -i 's/<application/<application android:usesCleartextTraffic="true"/g' android/app/src/main/AndroidManifest.xml
           npx cap sync android
